@@ -1,0 +1,183 @@
+ 
+#include <ESP8266WiFi.h>
+#include "FirebaseArduino.h"
+#include "DHT.h"
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
+
+#define FIREBASE_HOST "temphumdht11-a4d08.firebaseio.com"
+
+#define Relay1            D1
+#define Relay2            D2
+#define Relay4            D4
+#define DHTPIN            D5
+
+#define WLAN_SSID       "SHAPON"             // Your SSID
+#define WLAN_PASS       "shapon@321"        // Your password
+
+/************************* Adafruit.io Setup *********************************/
+#define DHTTYPE DHT11 
+#define AIO_SERVER      "io.adafruit.com"
+#define AIO_SERVERPORT  1883                   
+#define AIO_USERNAME    "sharifulkawsar"            
+#define AIO_KEY         "aio_fFsN25NQFQIAbk77PuV5fl1WaFIr"  
+
+DHT dht (DHTPIN, DHTTYPE);
+
+WiFiClient client;
+
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+
+Adafruit_MQTT_Subscribe Light1 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME"/feeds/Relay1");
+Adafruit_MQTT_Subscribe Light2 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/Relay2");
+
+Adafruit_MQTT_Subscribe Light4 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/Relay4");
+
+
+
+void MQTT_connect();
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(Relay1, OUTPUT);
+  pinMode(Relay2, OUTPUT);
+  pinMode(Relay4, OUTPUT);
+  
+  // Connect to WiFi access point.
+  Serial.println(); 
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(WLAN_SSID);
+
+  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+
+   Firebase.begin(FIREBASE_HOST);
+  pinMode (Relay1, OUTPUT);
+  pinMode (Relay4, OUTPUT);
+  }
+  Serial.println();
+
+  Serial.println("WiFi connected");
+  Serial.println("IP address: "); 
+  Serial.println(WiFi.localIP());
+ 
+
+  // Setup MQTT subscription for onoff feed.
+  mqtt.subscribe(&Light1);
+  mqtt.subscribe(&Light2);
+  mqtt.subscribe(&Light4);
+
+  
+{
+  Serial.begin(115200);
+  dht.begin();                                                  //reads dht sensor data 
+               
+  WiFi.begin(WLAN_SSID, WLAN_PASS);                                  
+  Serial.print("Connecting to ");
+  Serial.print(WLAN_SSID);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+ 
+  Serial.println();
+  Serial.print("Connected");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP()); 
+  Firebase.begin(FIREBASE_HOST);
+  
+}
+  
+}
+int n = 0;
+
+void loop() {
+ 
+  MQTT_connect();
+  
+
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(20000))) {
+    if (subscription == &Light1) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light1.lastread);
+      int Light1_State = atoi((char *)Light1.lastread);
+      digitalWrite(Relay1, Light1_State);
+    
+      
+    }
+    if (subscription == &Light2) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light2.lastread);
+      int Light2_State = atoi((char *)Light2.lastread);
+      digitalWrite(Relay2, Light2_State);
+    }
+    
+    if (subscription == &Light4) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)Light4.lastread);
+      int Light4_State = atoi((char *)Light4.lastread);
+      digitalWrite(Relay4, Light4_State);
+      
+    }
+  }
+
+
+ 
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();  // Reading temperature as Celsius (the default)
+ 
+  Serial.print("Humidity: ");  
+  Serial.print(h);
+  
+  Serial.print("% ; Temperature: ");  
+  Serial.print(t);  
+  Serial.println("°C ");
+
+
+ {
+  int val,val2;
+  val = analogRead(Relay1);
+  val2 = analogRead(Relay4);
+  Firebase.setInt("Fan/F",val);
+  Firebase.setInt("Light/L",val2);
+}
+
+  
+  
+}
+
+void MQTT_connect() {
+  int8_t ret;
+
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+  
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+    delay(500);  // wait 5 seconds
+    retries--;
+    if (retries == 0) {
+      // basically die and wait for WDT to reset me
+      while (1);
+    }
+  }
+  Serial.println("MQTT Connected!");
+  
+}
+
+
+
+ 
